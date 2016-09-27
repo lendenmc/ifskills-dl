@@ -409,6 +409,11 @@ class Course(object):
                     f.write(chunk)
 
     def download(self, lecture, session):
+        local_file = self.make_filename(lecture)
+        if os.path.isfile(local_file):
+            print("Skipping download of lecture: {}".format(lecture['title']))
+            print("Reason: file \"{}\" already exists".format(local_file))
+            return
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
         auth_params = self.authenticate(lecture, session)
@@ -416,7 +421,6 @@ class Course(object):
         print("Downloading file " + url)
         streaming_file = session.session.get(url, stream=True)
         session.check_response(streaming_file, DownloadError)
-        local_file = self.make_filename(lecture)
         self.stream(streaming_file, local_file)
 
     def get_working_files_id(self):
