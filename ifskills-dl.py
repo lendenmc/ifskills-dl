@@ -89,7 +89,7 @@ class ResponseParser(object):
         if login_attempts > 1 or clearout_param is None:
             advice = "Please manually clear out of any browser session"
             raise LoginError(advice)
-        print(msg)
+        print(msg, file=sys.stderr)
         return clearout_param
 
     def test_cookies_error(self):
@@ -161,18 +161,21 @@ class Session(object):
         errors_without_traceback = [
             AuthenticationError,
             HTMLError,
-            DownloadError
+            DownloadError,
+            KeyboardInterrupt
         ]
         if type in errors_without_traceback:
-            print(value)
-            self.logout()
-            return True
-        self.logout()
+            if type is not KeyboardInterrupt:
+                print(value, file=sys.stderr)
+            self.try_logout()
+            sys.exit(1)
+        self.try_logout()
 
-    def force_exit(self, error, msg):
-        print(ResponseParser.error_prefix + msg)
-        print(error)
-        sys.exit(1)
+    def force_exit(self, error, msg=None):
+        if msg is not None:
+            msg = ResponseParser.error_prefix + msg
+            print(msg, file=sys.stderr)
+        raise SystemExit(error)
 
     def try_login(self):
         print("Logging into account")
@@ -186,6 +189,14 @@ class Session(object):
         except ClearoutError as e:
             msg = "Cannot clear out of all active sessions"
             self.force_exit(e, msg)
+        except KeyboardInterrupt as e:
+            self.force_exit(e)
+
+    def try_logout(self):
+        try:
+            self.logout()
+        except KeyboardInterrupt:
+            print("")
 
     def check_response(self, response, error_type):
         parser = ResponseParser(response, error_type)
@@ -448,8 +459,7 @@ if __name__ == "__main__":
     if len(course_ids) == 0:
         msg = ResponseParser.error_prefix + \
             "Please provide at least one course id as argument"
-        print(msg)
-        sys.exit(1)
+        raise SystemExit(msg)
     with requests.Session() as s, Session(s) as session:
         for course_id in course_ids:
             course_content = session.authenticate(course_id).content
