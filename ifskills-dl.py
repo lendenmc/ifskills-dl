@@ -10,6 +10,7 @@ from zipfile import ZipFile
 
 import requests
 from requests.utils import get_netrc_auth
+from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
 
 
@@ -50,7 +51,6 @@ class ResponseParser(object):
         if not self.response:
             raise self.error_type(self.action + " didn't return anything")
         self.message = self.response.text
-        self.status = self.response.status_code
         self.error_msg = self.get_explicit_error()
         self.is_login_error = self.has_error_prefix("Login")
         self.is_clearout_error = self.has_error_prefix("Clearout")
@@ -97,14 +97,6 @@ class ResponseParser(object):
         if re.match(test_substring, str(self.error_msg)):
             msg = self.error_prefix + \
                 "Session aborted for some unexpected reason"
-            raise self.error_type(msg)
-        return False
-
-    def test_bad_status_code(self):
-        if self.status != 200:
-            msg = self.error_prefix + "Status code " + \
-                + str(self.status) + ": " + \
-                + self.action + " returned an unknown error"
             raise self.error_type(msg)
         return False
 
@@ -162,6 +154,7 @@ class Session(object):
             AuthenticationError,
             HTMLError,
             DownloadError,
+            RequestException,
             KeyboardInterrupt
         ]
         if type in errors_without_traceback:
@@ -183,7 +176,7 @@ class Session(object):
             self.login_attempts += 1
             self.startup()
             self.login()
-        except LoginError as e:
+        except (LoginError, RequestException) as e:
             msg = "Cannot log into account"
             self.force_exit(e, msg)
         except ClearoutError as e:
@@ -195,6 +188,9 @@ class Session(object):
     def try_logout(self):
         try:
             self.logout()
+        except RequestException as e:
+            msg = "Cannot log out of account"
+            self.force_exit(e, msg)
         except KeyboardInterrupt:
             print("")
 
@@ -202,8 +198,6 @@ class Session(object):
         parser = ResponseParser(response, error_type)
         if parser.error_msg:
             self.manage_errors(parser)
-        else:
-            parser.test_bad_status_code()
 
     def manage_errors(self, parser):
         login_attempts = self.login_attempts
@@ -223,7 +217,10 @@ class Session(object):
             'action': 'clear',
             'n': param
         }
-        r = self.session.get(url, headers=self.ajax_headers, params=params)
+        try:
+            r = self.session.get(url, headers=self.ajax_headers, params=params)
+        except RequestException as e:
+            raise ClearoutError(e)
         self.check_response(r, ClearoutError)
 
     def startup(self):
