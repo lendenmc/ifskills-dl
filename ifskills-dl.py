@@ -460,10 +460,19 @@ class Course(object):
             working_files_id = working_files.option['value']
             return working_files_id
 
-    def authenticate_working_files(self, session):
+    def test_working_files(self):
         if self.working_files_id is None:
-            print("")
             print("No working files for this course")
+            return
+        working_files_name = self.title + " - " + "Working Files"
+        if os.path.exists(self.title + '/' + working_files_name):
+            print("Working files already downloaded for this course")
+            return
+        return True
+
+    def authenticate_working_files(self, session):
+        print("")
+        if self.test_working_files() is None:
             return
         ajax_headers = session.ajax_headers
         url = session.host + "ajax/history.html"
@@ -473,7 +482,6 @@ class Course(object):
         }
         msg = "Authenticating course working files id: " + \
               self.working_files_id
-        print("")
         print(msg)
         zip_url = session.session.get(url, params=params, headers=ajax_headers)
         session.check_response(zip_url, AuthenticationError)
