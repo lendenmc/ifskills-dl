@@ -144,6 +144,14 @@ class ResponseParser(object):
 
 class Session(object):
 
+    errors_without_traceback = [
+        AuthenticationError,
+        HTMLError,
+        DownloadError,
+        RequestException,
+        KeyboardInterrupt
+    ]
+
     def __init__(self, session):
         self.session = session
         self.host = "https://learn.infiniteskills.com/"
@@ -156,14 +164,7 @@ class Session(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        errors_without_traceback = [
-            AuthenticationError,
-            HTMLError,
-            DownloadError,
-            RequestException,
-            KeyboardInterrupt
-        ]
-        if type in errors_without_traceback:
+        if type in self.errors_without_traceback:
             if type is not KeyboardInterrupt:
                 print(value, file=sys.stderr)
             self.try_logout()
