@@ -42,7 +42,7 @@ class ResponseParser(object):
 
     error_prefix = "Error: "
 
-    def __init__(self, response, error_type):
+    def __init__(self, response, error_type, stream=False):
         self.error_type = error_type
         self.action = self.error_prefix + \
             self.error_type.__name__.rstrip('Error') + \
@@ -50,14 +50,20 @@ class ResponseParser(object):
         self.response = response
         if not self.response:
             raise self.error_type(self.action + " didn't return anything")
-        self.message = self.response.text
+        self.stream = stream
+        self.message = self.read_text()
         self.error_msg = self.get_explicit_error()
         self.is_login_error = self.has_error_prefix("Login")
         self.is_clearout_error = self.has_error_prefix("Clearout")
         self.is_authentication_error = self.has_error_prefix("Authentication")
 
+    def read_text(self):
+        if self.stream:
+            return None
+        return self.response.text
+
     def get_explicit_error(self):
-        if self.message.startswith('error'):
+        if self.message and self.message.startswith('error'):
             error_msg = self.message.strip("error::").rstrip('.')
             return error_msg
 
@@ -194,8 +200,8 @@ class Session(object):
         except KeyboardInterrupt:
             print("")
 
-    def check_response(self, response, error_type):
-        parser = ResponseParser(response, error_type)
+    def check_response(self, response, error_type, **kwargs):
+        parser = ResponseParser(response, error_type, **kwargs)
         if parser.error_msg:
             self.manage_errors(parser)
 
@@ -417,7 +423,7 @@ class Course(object):
         url += auth_params
         print("Downloading file " + url)
         streaming_file = session.session.get(url, stream=True)
-        session.check_response(streaming_file, DownloadError)
+        session.check_response(streaming_file, DownloadError, stream=True)
         self.stream(streaming_file, local_file)
 
     def get_working_files_id(self):
@@ -450,7 +456,7 @@ class Course(object):
             return
         print("Downloading working files " + zip_url.strip('\n'))
         zip_file = session.session.get(zip_url, stream=True)
-        session.check_response(zip_file, DownloadError)
+        session.check_response(zip_file, DownloadError, stream=True)
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
             myzip.extractall(self.title)
 
