@@ -7,6 +7,7 @@ import re
 import json
 import io
 from zipfile import ZipFile
+from contextlib import suppress
 
 import requests
 from requests.utils import get_netrc_auth
@@ -407,10 +408,19 @@ class Course(object):
 
     @staticmethod
     def stream(streaming_file, local_file):
-        with open(local_file, 'wb') as f:
-            for chunk in streaming_file.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
+        try:
+            with open(local_file, 'wb') as f:
+                for chunk in streaming_file.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+        except KeyboardInterrupt as e:
+            with suppress(FileNotFoundError):
+                msg = "Removing incomplete download file " + \
+                      "\"" + local_file + "\""
+                print("")
+                print(msg)
+                os.remove(local_file)
+            raise e
 
     def download(self, lecture, session):
         local_file = self.make_filename(lecture)
