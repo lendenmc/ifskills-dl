@@ -431,6 +431,10 @@ class Course(object):
                 print(msg)
                 os.remove(local_file)
             raise e
+        except FileNotFoundError as e:
+            error = ResponseParser.error_prefix + \
+                re.sub(r'\[.+\] ', '', str(e))
+            raise DownloadError(error)
 
     def download(self, lecture, session):
         local_file = self.make_filename(lecture)
