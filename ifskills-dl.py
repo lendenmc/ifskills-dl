@@ -382,6 +382,7 @@ class Course(object):
             'file': lecture['file'],
             'vid': mediaid[0]
         }
+        print("")
         print("Authenticating lecture: " + lecture['title'])
         auth_params = session.session.get(url,
                                           headers=session.ajax_headers,
@@ -427,13 +428,15 @@ class Course(object):
         if os.path.isfile(local_file):
             msg = "Skipping download of existing file " + \
                   "\"" + local_file + "\""
+            print("")
             print(msg)
             return
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
         auth_params = self.authenticate(lecture, session)
         url += auth_params
-        print("Downloading file " + url)
+        print("Downloading file " + "\"" + local_file + "\"")
+        print("from " + url)
         streaming_file = session.session.get(url, stream=True)
         session.check_response(streaming_file, DownloadError, stream=True)
         self.stream(streaming_file, local_file)
@@ -446,6 +449,7 @@ class Course(object):
 
     def authenticate_working_files(self, session):
         if self.working_files_id is None:
+            print("")
             print("No working files for this course")
             return
         ajax_headers = session.ajax_headers
@@ -454,7 +458,10 @@ class Course(object):
             'event': 'file',
             'id': self.working_files_id
         }
-        print("Authenticating working files id: " + self.working_files_id)
+        msg = "Authenticating course working files id: " + \
+              self.working_files_id
+        print("")
+        print(msg)
         zip_url = session.session.get(url, params=params, headers=ajax_headers)
         session.check_response(zip_url, AuthenticationError)
         if zip_url.text.startswith('<!DOCTYPE html>'):
@@ -466,7 +473,9 @@ class Course(object):
         zip_url = self.authenticate_working_files(session)
         if zip_url is None:
             return
-        print("Downloading working files " + zip_url.strip('\n'))
+        msg = "Downloading course working files" + \
+              "from " + zip_url.strip('\n')
+        print(msg)
         zip_file = session.session.get(zip_url, stream=True)
         session.check_response(zip_file, DownloadError, stream=True)
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
