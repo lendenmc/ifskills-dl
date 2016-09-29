@@ -359,16 +359,22 @@ class Course(object):
         return placeholders
 
     @staticmethod
+    def sanitize_filename(name):
+        name = re.sub(r'\/', '', name)
+        return name
+
+    @staticmethod
     def makedir(dirname):
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
     def makedirs(self):
-        course_dirname = self.title
+        course_dirname = self.sanitize_filename(self.title)
         self.makedir(course_dirname)
-        section_dirnames = self.sections.values()
-        for section in section_dirnames:
-            self.makedir(course_dirname + '/' + section)
+        sections = self.sections.values()
+        for section in sections:
+            section_dirname = self.sanitize_filename(section)
+            self.makedir(course_dirname + '/' + section_dirname)
 
     @staticmethod
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
@@ -403,8 +409,11 @@ class Course(object):
     def make_filename(self, lecture):
         short_filename = lecture['file'].rsplit('/', 1)[-1]
         name, extension = os.path.splitext(short_filename)
-        filename = name + '. ' + lecture['title'] + extension
-        dirname = self.title + '/' + lecture['section'] + '/'
+        lecture_title = self.sanitize_filename(lecture['title'])
+        filename = name + '. ' + lecture_title + extension
+        title = self.sanitize_filename(self.title)
+        section = self.sanitize_filename(lecture['section'])
+        dirname = title + '/' + section + '/'
         return dirname + filename
 
     @staticmethod
