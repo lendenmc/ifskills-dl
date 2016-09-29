@@ -425,8 +425,9 @@ class Course(object):
     def download(self, lecture, session):
         local_file = self.make_filename(lecture)
         if os.path.isfile(local_file):
-            print("Skipping download of lecture: {}".format(lecture['title']))
-            print("Reason: file \"{}\" already exists".format(local_file))
+            msg = "Skipping download of existing file " + \
+                  "\"" + local_file + "\""
+            print(msg)
             return
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
