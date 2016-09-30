@@ -441,7 +441,6 @@ class Course(object):
         if os.path.isfile(local_file):
             msg = "Skipping download of existing file " + \
                   "\"" + local_file + "\""
-            print("")
             print(msg)
             return
         url = self.resource_host + "infiniteskills/"
@@ -471,7 +470,6 @@ class Course(object):
         return True
 
     def authenticate_working_files(self, session):
-        print("")
         if self.test_working_files() is None:
             return
         ajax_headers = session.ajax_headers
@@ -494,9 +492,8 @@ class Course(object):
         zip_url = self.authenticate_working_files(session)
         if zip_url is None:
             return
-        msg = "Downloading course working files" + \
-              "from " + zip_url.strip('\n')
-        print(msg)
+        print("Downloading course working files")
+        print("from " + zip_url.strip('\n'))
         zip_file = session.session.get(zip_url, stream=True)
         session.check_response(zip_file, DownloadError, stream=True)
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
@@ -510,10 +507,16 @@ if __name__ == "__main__":
             "Please provide at least one course id as argument"
         raise SystemExit(msg)
     with requests.Session() as s, Session(s) as session:
-        for course_id in course_ids:
+        for i, course_id in enumerate(course_ids):
             course_content = session.authenticate(course_id).content
             course = Course(course_id, course_content)
             course.makedirs()
             course.download_working_files(session)
             for lecture in course.lectures:
                 course.download(lecture, session)
+            msg = "Done with course " + course_id + \
+                  ": " + course.title
+            print("")
+            print(msg)
+            if i < len(course_ids) - 1:
+                print("")
