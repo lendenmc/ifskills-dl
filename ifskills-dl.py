@@ -6,6 +6,7 @@ import os
 import re
 import json
 import io
+import getpass
 from zipfile import ZipFile
 from contextlib import suppress
 
@@ -238,8 +239,8 @@ class Session(object):
 
     def login(self):
         url = self.host + "ajax/login.html"
-        data = self.get_credentials()
-        r = self.session.post(url, headers=self.ajax_headers, data=data)
+        credentials = self.get_credentials()
+        r = self.session.post(url, headers=self.ajax_headers, data=credentials)
         self.check_response(r, LoginError)
 
     def logout(self):
@@ -266,15 +267,21 @@ class Session(object):
 
     def get_credentials(self):
         auth = get_netrc_auth(self.host)
-        if not auth:
-            msg = "netrc missing or no credentials found in netrc"
+        if auth:
+            print("Found netrc credentials")
+            username, password = auth
+        else:
+            username = input("Username: ")
+            password = getpass.getpass()
+        if not username or not password:
+            msg = "Invalid credentials: " + \
+                  "username and password cannot be blank"
             raise LoginError(msg)
-        username, password = auth
-        data = {
+        credentials = {
             'username': username,
             'password': password
         }
-        return data
+        return credentials
 
     @staticmethod
     def get_ajax_headers():
