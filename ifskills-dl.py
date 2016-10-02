@@ -9,6 +9,7 @@ import io
 import getpass
 from zipfile import ZipFile
 from contextlib import suppress
+from collections import OrderedDict
 
 import requests
 from requests.utils import get_netrc_auth
@@ -129,19 +130,6 @@ class ResponseParser(object):
                 "Invalid course id: " + course_id
             raise AuthenticationError(msg)
         return title.contents[0]
-
-    @classmethod
-    def test_html(cls, name, tag, attrs, index, html):
-        selection = html.findAll(tag, attrs)
-        msg = cls.error_prefix + "Cannot find any " + name + " for this course"
-        if len(selection) == 0:
-            raise HTMLError(msg)
-        if index is not None:
-            try:
-                selection = selection[index]
-            except IndexError:
-                raise HTMLError(msg)
-        return selection
 
 
 class Session(object):
@@ -298,8 +286,8 @@ class Course(object):
         self.html = BeautifulSoup(content, 'html.parser')
         self.title = self.get_title()
         self.resource_host = "http://bitcast-r.v1.iad1.bitgravity.com/"
-        self.sections = self.get_sections()
         self.lectures = self.get_lectures()
+        self.sections = self.get_sections()
         self.working_files_id = self.get_working_files_id()
         print("Checking into course: " + self.title)
 
@@ -307,63 +295,42 @@ class Course(object):
         title = ResponseParser.test_course_title(self.html, self.id)
         return title
 
-    def test_html(self, name, tag, attrs, index=None, html=None):
-        if html is None:
-            html = self.html
-        return ResponseParser.test_html(name, tag, attrs, index, html)
+    @staticmethod
+    def format_lecture(raw):
+        lecture = re.sub(r'[\n\t]*(\w+): "', r'"\1": "', raw)
+        lecture = lecture.replace('\\', '')
+        lecture = json.loads(lecture)
+        mediaid = lecture['mediaid'].split('^')
+        lecture['vid'] = mediaid[0]
+        lecture['t'] = mediaid[1]
+        lecture['section'] = lecture['description']
+        return lecture
 
-    def get_sections(self):
-        sections = {}
-        raw_sections = self.test_html('sections', 'a', {
-            'href': re.compile('#section[0-9]+')
-        })
-        for section in raw_sections:
-            name = re.sub(r'[\t\n]', '', section.contents[0]).strip(' ')
-            id = section['href'][1:]
-            sections[id] = name
-        return sections
+    def format_lectures(self, raw):
+        lectures = []
+        for i, raw_lecture in enumerate(raw):
+            lecture = self.format_lecture(raw_lecture)
+            lecture['index'] = i
+            lectures.append(lecture)
+        return lectures
 
     def get_lectures(self):
-        metadata = self.get_lectures_metadata()
-        placeholders = self.get_lectures_placeholders()
-        for lecture in metadata:
-            placeholder = placeholders[lecture['title']]
-            for key in placeholder:
-                lecture[key] = placeholder[key]
-        return metadata
+        msg = ResponseParser.error_prefix + \
+            "Cannot find any lectures for this course"
+        raw_playlist = self.html.find('script', text=re.compile('playlist: '))
+        if raw_playlist is None:
+            raise HTMLError(msg)
+        raw_lectures = re.findall(r'{image:.*?}', raw_playlist.contents[0],
+                                  re.DOTALL)
+        if len(raw_lectures) == 0:
+            raise HTMLError(msg)
+        lectures = self.format_lectures(raw_lectures)
+        return lectures
 
-    def get_lectures_metadata(self):
-        scripts = self.test_html('lectures', 'script', {
-            'type': 'text/javascript'
-        }, index=2)
-        metadata = scripts.contents[0]
-        metadata = metadata.split('[', 1)[1].split(']', 1)[0]
-        metadata = re.sub(r'([\t\{])(\w+):', r'\1"\2":', metadata)
-        metadata = re.sub(r'[\t\n]', '', metadata)
-        metadata = metadata.replace('\\', '').strip().strip(',')
-        metadata = "[%s]" % metadata
-        metadata = json.loads(metadata)
-        return metadata
-
-    def get_lectures_placeholders(self):
-        placeholders = {}
-        raw_sections = self.test_html('sections', 'div', {
-            'id': re.compile('section[0-9]+')
-        })
-        for section in raw_sections:
-            section_id = section['id']
-            section_name = self.sections[section_id]
-            lectures = self.test_html('lectures', 'div', {
-                'class': 'tutorial-item'
-            }, html=section)
-            for lecture in lectures:
-                title = lecture.contents[0].rsplit(' (', 1)[0]
-                index = lecture['id'].rsplit('_', 1)[1]
-                placeholders[title] = {
-                    'index': index,
-                    'section': section_name
-                }
-        return placeholders
+    def get_sections(self):
+        lectures_sections = [lecture['section'] for lecture in self.lectures]
+        sections = list(OrderedDict.fromkeys(lectures_sections))
+        return sections
 
     @staticmethod
     def sanitize_filename(name):
@@ -378,8 +345,7 @@ class Course(object):
     def makedirs(self):
         course_dirname = self.sanitize_filename(self.title)
         self.makedir(course_dirname)
-        sections = self.sections.values()
-        for section in sections:
+        for section in self.sections:
             section_dirname = self.sanitize_filename(section)
             self.makedir(course_dirname + '/' + section_dirname)
 
@@ -387,16 +353,10 @@ class Course(object):
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
     def authenticate(lecture, session):
         url = session.host + "ajax/player.html"
-        mediaid = lecture['mediaid'].split('^')
-        params = {
-            'action': 'hash',
-            't': mediaid[1],
-            'index': lecture['index'],
-            'file': lecture['file'],
-            'vid': mediaid[0]
-        }
         print("")
         print("Authenticating lecture: " + lecture['title'])
+        params = {key: lecture[key] for key in ['t', 'index', 'file', 'vid']}
+        params['action'] = 'hash'
         auth_params = session.session.get(url,
                                           headers=session.ajax_headers,
                                           params=params)
