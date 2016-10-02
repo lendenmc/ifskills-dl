@@ -41,6 +41,15 @@ class HTMLError(Exception):
     pass
 
 
+def print_msg(action, resource=None, url=None):
+    msg = action
+    if resource is not None:
+        msg += ": \"{}\"".format(resource)
+    print(msg)
+    if url is not None:
+        print("from url {}".format(url))
+
+
 class ResponseParser(object):
 
     error_prefix = "Error: "
@@ -157,6 +166,7 @@ class Session(object):
         if type in self.errors_without_traceback:
             if type is not KeyboardInterrupt:
                 print(value, file=sys.stderr)
+            print("")
             self.try_logout()
             sys.exit(1)
         self.try_logout()
@@ -236,7 +246,6 @@ class Session(object):
         params = {
             'action': 'logout'
         }
-        print("")
         print("Logging out of account")
         r = self.session.get(url, params=params)
         self.check_response(r, LogoutError)
@@ -246,7 +255,7 @@ class Session(object):
         params = {
             'sku': course_id
         }
-        print("Authenticating course " + course_id)
+        print_msg("Authenticating course id", course_id)
         r = self.session.get(url, params=params)
         self.check_response(r, AuthenticationError)
         html = BeautifulSoup(r.content, 'html.parser')
@@ -262,8 +271,7 @@ class Session(object):
             username = input("Username: ")
             password = getpass.getpass()
         if not username or not password:
-            msg = "Invalid credentials: " + \
-                  "username and password cannot be blank"
+            msg = "Invalid credentials: username and password cannot be blank"
             raise LoginError(msg)
         credentials = {
             'username': username,
@@ -289,7 +297,9 @@ class Course(object):
         self.lectures = self.get_lectures()
         self.sections = self.get_sections()
         self.working_files_id = self.get_working_files_id()
-        print("Checking into course: " + self.title)
+        self.last_skipped = False
+        print_msg("Checking into course", self.title)
+        print("")
 
     def get_title(self):
         title = ResponseParser.test_course_title(self.html, self.id)
@@ -349,14 +359,15 @@ class Course(object):
             section_dirname = self.sanitize_filename(section)
             self.makedir(course_dirname + '/' + section_dirname)
 
-    @staticmethod
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
-    def authenticate(lecture, session):
+    def authenticate(self, lecture, session):
         url = session.host + "ajax/player.html"
-        print("")
-        print("Authenticating lecture: " + lecture['title'])
         params = {key: lecture[key] for key in ['t', 'index', 'file', 'vid']}
         params['action'] = 'hash'
+        if self.last_skipped:
+            print("")
+        self.last_skipped = False
+        print_msg("Authenticating lecture", lecture['title'])
         auth_params = session.session.get(url,
                                           headers=session.ajax_headers,
                                           params=params)
@@ -392,10 +403,8 @@ class Course(object):
                         f.write(chunk)
         except KeyboardInterrupt as e:
             with suppress(FileNotFoundError):
-                msg = "Removing incomplete download file " + \
-                      "\"" + local_file + "\""
                 print("")
-                print(msg)
+                print_msg("Removing incomplete download file", local_file)
                 os.remove(local_file)
             raise e
         except FileNotFoundError as e:
@@ -406,19 +415,18 @@ class Course(object):
     def download(self, lecture, session):
         local_file = self.make_filename(lecture)
         if os.path.isfile(local_file):
-            msg = "Skipping download of existing file " + \
-                  "\"" + local_file + "\""
-            print(msg)
+            print_msg("Skipping download of existing file", local_file)
+            self.last_skipped = True
             return
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
         auth_params = self.authenticate(lecture, session)
         url += auth_params
-        print("Downloading file " + "\"" + local_file + "\"")
-        print("from " + url)
+        print_msg("Downloading file", local_file, url=url)
         streaming_file = session.session.get(url, stream=True)
         session.check_response(streaming_file, DownloadError, stream=True)
         self.stream(streaming_file, local_file)
+        print("")
 
     def get_working_files_id(self):
         working_files = self.html.find('form', {'id': 'filedownload'})
@@ -430,8 +438,8 @@ class Course(object):
         if self.working_files_id is None:
             print("No working files for this course")
             return
-        working_files_name = self.title + " - " + "Working Files"
-        if os.path.exists(self.title + '/' + working_files_name):
+        wf_name = self.title + " - " + "Working Files"
+        if os.path.exists(self.title + '/' + wf_name):
             print("Working files already downloaded for this course")
             return
         return True
@@ -439,15 +447,14 @@ class Course(object):
     def authenticate_working_files(self, session):
         if self.test_working_files() is None:
             return
+        wfid = self.working_files_id
         ajax_headers = session.ajax_headers
         url = session.host + "ajax/history.html"
         params = {
             'event': 'file',
-            'id': self.working_files_id
+            'id': wfid
         }
-        msg = "Authenticating course working files id: " + \
-              self.working_files_id
-        print(msg)
+        print_msg("Authenticating course working files id", wfid)
         zip_url = session.session.get(url, params=params, headers=ajax_headers)
         session.check_response(zip_url, AuthenticationError)
         if zip_url.text.startswith('<!DOCTYPE html>'):
@@ -458,13 +465,14 @@ class Course(object):
     def download_working_files(self, session):
         zip_url = self.authenticate_working_files(session)
         if zip_url is None:
+            print("")
             return
-        print("Downloading course working files")
-        print("from " + zip_url.strip('\n'))
+        print_msg("Downloading course working files", url=zip_url.strip('\n'))
         zip_file = session.session.get(zip_url, stream=True)
         session.check_response(zip_file, DownloadError, stream=True)
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
             myzip.extractall(self.title)
+        print("")
 
 
 if __name__ == "__main__":
@@ -474,16 +482,14 @@ if __name__ == "__main__":
             "Please provide at least one course id as argument"
         raise SystemExit(msg)
     with requests.Session() as s, Session(s) as session:
-        for i, course_id in enumerate(course_ids):
+        for course_id in course_ids:
             course_content = session.authenticate(course_id).content
             course = Course(course_id, course_content)
             course.makedirs()
             course.download_working_files(session)
             for lecture in course.lectures:
                 course.download(lecture, session)
-            msg = "Done with course " + course_id + \
-                  ": " + course.title
-            print("")
-            print(msg)
-            if i < len(course_ids) - 1:
+            if course.last_skipped:
                 print("")
+            print_msg("Done with course " + course_id, course.title)
+            print("")
