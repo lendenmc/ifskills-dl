@@ -50,18 +50,27 @@ def print_msg(action, resource=None, url=None):
         print("from url {}".format(url))
 
 
-class ResponseParser(object):
+def raise_error(error_type, msg, error=None):
+    error_msg = "Error: " + msg
+    if error is not None:
+        print(error_msg, file=sys.stderr)
+        raise error_type(error)
+    raise error_type(error_msg)
 
-    error_prefix = "Error: "
+
+def force_exit(msg, error=None):
+    raise_error(SystemExit, msg, error)
+
+
+class ResponseParser(object):
 
     def __init__(self, response, error_type, stream=False):
         self.error_type = error_type
-        self.action = self.error_prefix + \
-            self.error_type.__name__.rstrip('Error') + \
-            ' attempt'
+        self.action = self.error_type.__name__.rstrip('Error') + ' attempt'
         self.response = response
         if not self.response:
-            raise self.error_type(self.action + " didn't return anything")
+            msg = self.action + " didn't return anything"
+            raise_error(self.error_type, msg)
         self.stream = stream
         self.message = self.read_text()
         self.error_msg = self.get_explicit_error()
@@ -102,7 +111,7 @@ class ResponseParser(object):
         if msg is None:
             return False
         if not self.is_login_error:
-            raise self.error_type(self.error_prefix + msg)
+            raise_error(self.error_type, msg)
         clearout_param = self.get_clearout_param()
         if login_attempts > 1 or clearout_param is None:
             advice = "Please manually clear out of any browser session"
@@ -113,9 +122,8 @@ class ResponseParser(object):
     def test_cookies_error(self):
         test_substring = re.compile('.+browser that accepts cookies')
         if re.match(test_substring, str(self.error_msg)):
-            msg = self.error_prefix + \
-                "Session aborted for some unexpected reason"
-            raise self.error_type(msg)
+            msg = "Session aborted for some unexpected reason"
+            raise_error(self.error_type, msg)
         return False
 
     def raise_default_error(self):
@@ -125,7 +133,7 @@ class ResponseParser(object):
             raise self.error_type(self.error_msg)
         else:
             msg = self.action + " failed\n" + self.error_msg
-            raise self.error_type(msg)
+            raise_error(self.error_type, msg)
 
     @classmethod
     def test_course_title(cls, html, course_id):
@@ -134,10 +142,9 @@ class ResponseParser(object):
             'href': href
         })
         if title is None:
-            msg = cls.error_prefix + \
-                "Authentication attempt failed\n" + \
-                "Invalid course id: " + course_id
-            raise AuthenticationError(msg)
+            msg = "Authentication attempt failed\n" + \
+                "Invalid course id: \"" + course_id + "\""
+            raise_error(AuthenticationError, msg)
         return title.contents[0]
 
 
@@ -171,12 +178,6 @@ class Session(object):
             sys.exit(1)
         self.try_logout()
 
-    def force_exit(self, error, msg=None):
-        if msg is not None:
-            msg = ResponseParser.error_prefix + msg
-            print(msg, file=sys.stderr)
-        raise SystemExit(error)
-
     def try_login(self):
         print("Logging into account")
         try:
@@ -185,19 +186,19 @@ class Session(object):
             self.login()
         except (LoginError, RequestException) as e:
             msg = "Cannot log into account"
-            self.force_exit(e, msg)
+            force_exit(msg, e)
         except ClearoutError as e:
             msg = "Cannot clear out of all active sessions"
-            self.force_exit(e, msg)
+            force_exit(msg, e)
         except KeyboardInterrupt as e:
-            self.force_exit(e)
+            raise SystemExit(e)
 
     def try_logout(self):
         try:
             self.logout()
         except RequestException as e:
             msg = "Cannot log out of account"
-            self.force_exit(e, msg)
+            force_exit(msg, e)
         except KeyboardInterrupt:
             print("")
 
@@ -325,15 +326,14 @@ class Course(object):
         return lectures
 
     def get_lectures(self):
-        msg = ResponseParser.error_prefix + \
-            "Cannot find any lectures for this course"
         raw_playlist = self.html.find('script', text=re.compile('playlist: '))
-        if raw_playlist is None:
-            raise HTMLError(msg)
-        raw_lectures = re.findall(r'{image:.*?}', raw_playlist.contents[0],
-                                  re.DOTALL)
-        if len(raw_lectures) == 0:
-            raise HTMLError(msg)
+        try:
+            raw_lectures = re.findall(r'{image:.*?}', raw_playlist.contents[0],
+                                      re.DOTALL)
+            if len(raw_lectures) == 0:
+                raise HTMLError
+        except (AttributeError, HTMLError):
+            raise_error(HTMLError, "Cannot find any lectures for this course")
         lectures = self.format_lectures(raw_lectures)
         return lectures
 
@@ -365,8 +365,7 @@ class Course(object):
         session.check_response(fetched, AuthenticationError)
         if fetched.text.startswith('<!DOCTYPE html>'):
             if attempts > 2:
-                msg = ResponseParser.error_prefix + error_msg
-                raise AuthenticationError(msg)
+                raise_error(AuthenticationError, error_msg)
             attempts += 1
             return self.fetch_string(session, url, params, error_msg, attempts)
         return fetched.text
@@ -408,9 +407,7 @@ class Course(object):
                 os.remove(local_file)
             raise e
         except FileNotFoundError as e:
-            error = ResponseParser.error_prefix + \
-                re.sub(r'\[.+\] ', '', str(e))
-            raise DownloadError(error)
+            raise_error(DownloadError, re.sub(r'\[.+\] ', '', str(e)))
 
     def download(self, lecture, session):
         local_file = self.make_filename(lecture)
@@ -474,9 +471,7 @@ class Course(object):
 if __name__ == "__main__":
     course_ids = sys.argv[1:]
     if len(course_ids) == 0:
-        msg = ResponseParser.error_prefix + \
-            "Please provide at least one course id as argument"
-        raise SystemExit(msg)
+        force_exit("Please provide at least one course id as argument")
     with requests.Session() as s, Session(s) as session:
         for course_id in course_ids:
             course_content = session.authenticate(course_id).content
