@@ -425,7 +425,7 @@ class Course(object):
         return url
 
     def download(self, url):
-        streaming_file = self.session.session.get(url, stream=True)
+        streaming_file = requests.get(url, stream=True)
         self.session.check_response(streaming_file, DownloadError, stream=True)
         return streaming_file
 
@@ -462,7 +462,7 @@ class Course(object):
             myzip.extractall(self.title)
 
     def download_working_files(self, url):
-        zip_file = self.session.session.get(zip_url, stream=True)
+        zip_file = requests.get(zip_url, stream=True)
         self.session.check_response(zip_file, DownloadError, stream=True)
         return zip_file
 
