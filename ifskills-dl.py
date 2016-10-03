@@ -359,6 +359,18 @@ class Course(object):
             section_dirname = self.sanitize_filename(section)
             self.makedir(course_dirname + '/' + section_dirname)
 
+    def fetch_string(self, session, url, params, error_msg, attempts=1):
+        headers = session.ajax_headers
+        fetched = session.session.get(url, headers=headers, params=params)
+        session.check_response(fetched, AuthenticationError)
+        if fetched.text.startswith('<!DOCTYPE html>'):
+            if attempts > 2:
+                msg = ResponseParser.error_prefix + error_msg
+                raise AuthenticationError(msg)
+            attempts += 1
+            return self.fetch_string(session, url, params, error_msg, attempts)
+        return fetched.text
+
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
     def authenticate(self, lecture, session):
         url = session.host + "ajax/player.html"
@@ -368,21 +380,9 @@ class Course(object):
             print("")
         self.last_skipped = False
         print_msg("Authenticating lecture", lecture['title'])
-        auth_params = session.session.get(url,
-                                          headers=session.ajax_headers,
-                                          params=params)
-        session.check_response(auth_params, AuthenticationError)
-        if auth_params.text.startswith('<!DOCTYPE html>'):
-            # try a second time
-            auth_params = session.session.get(url,
-                                              headers=session.ajax_headers,
-                                              params=params)
-            session.check_response(auth_params, AuthenticationError)
-            if auth_params.text.startswith('<!DOCTYPE html>'):
-                msg = ResponseParser.error_prefix + \
-                    "No authentication params were returned"
-                raise AuthenticationError(msg)
-        return auth_params.text
+        error_msg = "No authentication params were returned"
+        auth_params = self.fetch_string(session, url, params, error_msg)
+        return auth_params
 
     def make_filename(self, lecture):
         short_filename = lecture['file'].rsplit('/', 1)[-1]
@@ -447,20 +447,16 @@ class Course(object):
     def authenticate_working_files(self, session):
         if self.test_working_files() is None:
             return
-        wfid = self.working_files_id
-        ajax_headers = session.ajax_headers
         url = session.host + "ajax/history.html"
+        wfid = self.working_files_id
         params = {
             'event': 'file',
             'id': wfid
         }
         print_msg("Authenticating course working files id", wfid)
-        zip_url = session.session.get(url, params=params, headers=ajax_headers)
-        session.check_response(zip_url, AuthenticationError)
-        if zip_url.text.startswith('<!DOCTYPE html>'):
-            msg = ResponseParser.error_prefix + "No zip file url was returned"
-            raise AuthenticationError(msg)
-        return zip_url.text
+        error_msg = "No zip file url was returned"
+        zip_url = self.fetch_string(session, url, params, error_msg)
+        return zip_url
 
     def download_working_files(self, session):
         zip_url = self.authenticate_working_files(session)
