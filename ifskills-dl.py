@@ -290,9 +290,10 @@ class Session(object):
 
 class Course(object):
 
-    def __init__(self, id, content):
+    def __init__(self, id, content, session):
         self.id = id
         self.html = BeautifulSoup(content, 'html.parser')
+        self.session = session
         self.title = self.get_title()
         self.resource_host = "http://bitcast-r.v1.iad1.bitgravity.com/"
         self.lectures = self.get_lectures()
@@ -359,20 +360,20 @@ class Course(object):
             section_dirname = self.sanitize_filename(section)
             self.makedir(course_dirname + '/' + section_dirname)
 
-    def fetch_string(self, session, url, params, error_msg, attempts=1):
-        headers = session.ajax_headers
-        fetched = session.session.get(url, headers=headers, params=params)
-        session.check_response(fetched, AuthenticationError)
+    def fetch_string(self, url, params, error_msg, attempts=1):
+        headers = self.session.ajax_headers
+        fetched = self.session.session.get(url, headers=headers, params=params)
+        self.session.check_response(fetched, AuthenticationError)
         if fetched.text.startswith('<!DOCTYPE html>'):
             if attempts > 2:
                 raise_error(AuthenticationError, error_msg)
             attempts += 1
-            return self.fetch_string(session, url, params, error_msg, attempts)
+            return self.fetch_string(url, params, error_msg, attempts)
         return fetched.text
 
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
-    def authenticate(self, lecture, session):
-        url = session.host + "ajax/player.html"
+    def authenticate(self, lecture):
+        url = self.session.host + "ajax/player.html"
         params = {key: lecture[key] for key in ['t', 'index', 'file', 'vid']}
         params['action'] = 'hash'
         if self.last_skipped:
@@ -380,7 +381,7 @@ class Course(object):
         self.last_skipped = False
         print_msg("Authenticating lecture", lecture['title'])
         error_msg = "No authentication params were returned"
-        auth_params = self.fetch_string(session, url, params, error_msg)
+        auth_params = self.fetch_string(url, params, error_msg)
         return auth_params
 
     def make_filename(self, lecture):
@@ -409,7 +410,7 @@ class Course(object):
         except FileNotFoundError as e:
             raise_error(DownloadError, re.sub(r'\[.+\] ', '', str(e)))
 
-    def download(self, lecture, session):
+    def download(self, lecture):
         local_file = self.make_filename(lecture)
         if os.path.isfile(local_file):
             print_msg("Skipping download of existing file", local_file)
@@ -417,11 +418,11 @@ class Course(object):
             return
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
-        auth_params = self.authenticate(lecture, session)
+        auth_params = self.authenticate(lecture)
         url += auth_params
         print_msg("Downloading file", local_file, url=url)
-        streaming_file = session.session.get(url, stream=True)
-        session.check_response(streaming_file, DownloadError, stream=True)
+        streaming_file = self.session.session.get(url, stream=True)
+        self.session.check_response(streaming_file, DownloadError, stream=True)
         self.stream(streaming_file, local_file)
         print("")
 
@@ -441,10 +442,10 @@ class Course(object):
             return
         return True
 
-    def authenticate_working_files(self, session):
+    def authenticate_working_files(self):
         if self.test_working_files() is None:
             return
-        url = session.host + "ajax/history.html"
+        url = self.session.host + "ajax/history.html"
         wfid = self.working_files_id
         params = {
             'event': 'file',
@@ -452,17 +453,17 @@ class Course(object):
         }
         print_msg("Authenticating course working files id", wfid)
         error_msg = "No zip file url was returned"
-        zip_url = self.fetch_string(session, url, params, error_msg)
+        zip_url = self.fetch_string(url, params, error_msg)
         return zip_url
 
-    def download_working_files(self, session):
-        zip_url = self.authenticate_working_files(session)
+    def download_working_files(self):
+        zip_url = self.authenticate_working_files()
         if zip_url is None:
             print("")
             return
         print_msg("Downloading course working files", url=zip_url.strip('\n'))
-        zip_file = session.session.get(zip_url, stream=True)
-        session.check_response(zip_file, DownloadError, stream=True)
+        zip_file = self.session.session.get(zip_url, stream=True)
+        self.session.check_response(zip_file, DownloadError, stream=True)
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
             myzip.extractall(self.title)
         print("")
@@ -475,11 +476,11 @@ if __name__ == "__main__":
     with requests.Session() as s, Session(s) as session:
         for course_id in course_ids:
             course_content = session.authenticate(course_id).content
-            course = Course(course_id, course_content)
+            course = Course(course_id, course_content, session)
             course.makedirs()
-            course.download_working_files(session)
+            course.download_working_files()
             for lecture in course.lectures:
-                course.download(lecture, session)
+                course.download(lecture)
             if course.last_skipped:
                 print("")
             print_msg("Done with course " + course_id, course.title)
