@@ -394,6 +394,13 @@ class Course(object):
         dirname = title + '/' + section + '/'
         return dirname + filename
 
+    def test_file(self, local_file):
+        if os.path.isfile(local_file):
+            print_msg("Skipping download of existing file", local_file)
+            self.last_skipped = True
+            return
+        return True
+
     @staticmethod
     def stream(streaming_file, local_file):
         try:
@@ -410,21 +417,17 @@ class Course(object):
         except FileNotFoundError as e:
             raise_error(DownloadError, re.sub(r'\[.+\] ', '', str(e)))
 
-    def download(self, lecture):
-        local_file = self.make_filename(lecture)
-        if os.path.isfile(local_file):
-            print_msg("Skipping download of existing file", local_file)
-            self.last_skipped = True
-            return
+    def fetch_url(self, lecture):
         url = self.resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
         auth_params = self.authenticate(lecture)
         url += auth_params
-        print_msg("Downloading file", local_file, url=url)
+        return url
+
+    def download(self, url):
         streaming_file = self.session.session.get(url, stream=True)
         self.session.check_response(streaming_file, DownloadError, stream=True)
-        self.stream(streaming_file, local_file)
-        print("")
+        return streaming_file
 
     def get_working_files_id(self):
         working_files = self.html.find('form', {'id': 'filedownload'})
@@ -442,9 +445,7 @@ class Course(object):
             return
         return True
 
-    def authenticate_working_files(self):
-        if self.test_working_files() is None:
-            return
+    def fetch_zip_url(self):
         url = self.session.host + "ajax/history.html"
         wfid = self.working_files_id
         params = {
@@ -456,17 +457,14 @@ class Course(object):
         zip_url = self.fetch_string(url, params, error_msg)
         return zip_url
 
-    def download_working_files(self):
-        zip_url = self.authenticate_working_files()
-        if zip_url is None:
-            print("")
-            return
-        print_msg("Downloading course working files", url=zip_url.strip('\n'))
-        zip_file = self.session.session.get(zip_url, stream=True)
-        self.session.check_response(zip_file, DownloadError, stream=True)
+    def stream_working_files(self, zip_file):
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
             myzip.extractall(self.title)
-        print("")
+
+    def download_working_files(self, url):
+        zip_file = self.session.session.get(zip_url, stream=True)
+        self.session.check_response(zip_file, DownloadError, stream=True)
+        return zip_file
 
 
 if __name__ == "__main__":
@@ -478,9 +476,22 @@ if __name__ == "__main__":
             course_content = session.authenticate(course_id).content
             course = Course(course_id, course_content, session)
             course.makedirs()
-            course.download_working_files()
+            if course.test_working_files():
+                zip_url = course.fetch_zip_url()
+                msg = "Downloading course working files"
+                print_msg(msg, url=zip_url.strip('\n'))
+                zip_file = course.download_working_files(zip_url)
+                course.stream_working_files(zip_file)
+            print("")
             for lecture in course.lectures:
-                course.download(lecture)
+                local_file = course.make_filename(lecture)
+                if course.test_file(local_file) is None:
+                    continue
+                url = course.fetch_url(lecture)
+                print_msg("Downloading file", local_file, url=url)
+                streaming_file = course.download(url)
+                course.stream(streaming_file, local_file)
+                print("")
             if course.last_skipped:
                 print("")
             print_msg("Done with course " + course_id, course.title)
