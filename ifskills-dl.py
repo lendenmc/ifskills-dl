@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+'''
+File: ifskills-dl.py
+Author: lendenmc
+Date: 2016-10-05
+Description: Command line video downloader for learn.infiniteskills.com account
+'''
 
 import sys
 import os
