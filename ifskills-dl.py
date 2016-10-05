@@ -172,14 +172,14 @@ class Session(object):
 
     def __enter__(self):
         self.try_login()
-        print("")
+        print()
         return self
 
     def __exit__(self, type, value, traceback):
         if type in self.errors_without_traceback:
             if type is not KeyboardInterrupt:
                 print(value, file=sys.stderr)
-            print("")
+            print()
             self.try_logout()
             sys.exit(1)
         self.try_logout()
@@ -206,7 +206,7 @@ class Session(object):
             msg = "Cannot log out of account"
             force_exit(msg, e)
         except KeyboardInterrupt:
-            print("")
+            print()
 
     def check_response(self, response, error_type, **kwargs):
         parser = ResponseParser(response, error_type, **kwargs)
@@ -307,7 +307,7 @@ class Course(object):
         self.working_files_id = self.get_working_files_id()
         self.last_skipped = False
         print_msg("Checking into course", self.title)
-        print("")
+        print()
 
     def get_title(self):
         title = ResponseParser.test_course_title(self.html, self.id)
@@ -383,7 +383,7 @@ class Course(object):
         params = {key: lecture[key] for key in ['t', 'index', 'file', 'vid']}
         params['action'] = 'hash'
         if self.last_skipped:
-            print("")
+            print()
         self.last_skipped = False
         print_msg("Authenticating lecture", lecture['title'])
         error_msg = "No authentication params were returned"
@@ -416,7 +416,7 @@ class Course(object):
                         f.write(chunk)
         except KeyboardInterrupt as e:
             with suppress(FileNotFoundError):
-                print("")
+                print()
                 print_msg("Removing incomplete download file", local_file)
                 os.remove(local_file)
             raise e
@@ -488,7 +488,7 @@ if __name__ == "__main__":
                 print_msg(msg, url=zip_url.strip('\n'))
                 zip_file = course.download_working_files(zip_url)
                 course.stream_working_files(zip_file)
-            print("")
+            print()
             for lecture in course.lectures:
                 local_file = course.make_filename(lecture)
                 if course.test_file(local_file) is None:
@@ -497,8 +497,8 @@ if __name__ == "__main__":
                 print_msg("Downloading file", local_file, url=url)
                 streaming_file = course.download(url)
                 course.stream(streaming_file, local_file)
-                print("")
+                print()
             if course.last_skipped:
-                print("")
+                print()
             print_msg("Done with course " + course_id, course.title)
-            print("")
+            print()
