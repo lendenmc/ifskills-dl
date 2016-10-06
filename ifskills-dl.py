@@ -13,7 +13,7 @@ import re
 import json
 import io
 import getpass
-from zipfile import ZipFile
+from zipfile import ZipFile, BadZipFile
 from contextlib import suppress
 from collections import OrderedDict
 
@@ -152,6 +152,12 @@ class ResponseParser(object):
                 "Invalid course id: \"" + course_id + "\""
             raise_error(AuthenticationError, msg)
         return title.contents[0]
+
+    @classmethod
+    def test_stream(cls, chunk):
+        if type(chunk) is not bytes or chunk.strip().startswith(b'<!DOCTYPE'):
+            raise_error(DownloadError, "No streaming file was returned")
+        return True
 
 
 class Session(object):
@@ -409,15 +415,16 @@ class Course(object):
 
     @staticmethod
     def stream(streaming_file, local_file):
+        sf = streaming_file
         try:
             with open(local_file, 'wb') as f:
-                for chunk in streaming_file.iter_content(chunk_size=1024):
+                for i, chunk in enumerate(sf.iter_content(chunk_size=1024)):
+                    if i == 0:
+                        ResponseParser.test_stream(chunk)
                     if chunk:
                         f.write(chunk)
-        except KeyboardInterrupt as e:
+        except (KeyboardInterrupt, DownloadError) as e:
             with suppress(FileNotFoundError):
-                print()
-                print_msg("Removing incomplete download file", local_file)
                 os.remove(local_file)
             raise e
         except FileNotFoundError as e:
@@ -464,8 +471,11 @@ class Course(object):
         return zip_url
 
     def stream_working_files(self, zip_file):
-        with ZipFile(io.BytesIO(zip_file.content)) as myzip:
-            myzip.extractall(self.title)
+        try:
+            with ZipFile(io.BytesIO(zip_file.content)) as myzip:
+                myzip.extractall(self.title)
+        except BadZipFile:
+            raise_error(DownloadError, "No zip file was returned")
 
 
 if __name__ == "__main__":
