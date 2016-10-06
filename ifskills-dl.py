@@ -431,9 +431,9 @@ class Course(object):
         return url
 
     def download(self, url):
-        streaming_file = requests.get(url, stream=True)
-        self.session.check_response(streaming_file, DownloadError, stream=True)
-        return streaming_file
+        file = requests.get(url, stream=True)
+        self.session.check_response(file, DownloadError, stream=True)
+        return file
 
     def get_working_files_id(self):
         working_files = self.html.find('form', {'id': 'filedownload'})
@@ -467,11 +467,6 @@ class Course(object):
         with ZipFile(io.BytesIO(zip_file.content)) as myzip:
             myzip.extractall(self.title)
 
-    def download_working_files(self, url):
-        zip_file = requests.get(zip_url, stream=True)
-        self.session.check_response(zip_file, DownloadError, stream=True)
-        return zip_file
-
 
 if __name__ == "__main__":
     course_ids = sys.argv[1:]
@@ -486,7 +481,7 @@ if __name__ == "__main__":
                 zip_url = course.fetch_zip_url()
                 msg = "Downloading course working files"
                 print_msg(msg, url=zip_url.strip('\n'))
-                zip_file = course.download_working_files(zip_url)
+                zip_file = course.download(zip_url)
                 course.stream_working_files(zip_file)
             print()
             for lecture in course.lectures:
