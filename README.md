@@ -1,4 +1,4 @@
-# Ifskills-dl v0.1
+# Ifskills-dl v0.1*
 
 ##  https://learn.infiniteskills.com training videos downloader
 This is the first released version of the ifskills-dl command-line program. 
@@ -10,7 +10,7 @@ Once its dependencies are installed (see bellow), you run this version of the pr
 ```
 $ python ifskills-dl.py sku1 sku2 sku3
 ````
-where `sku1`,  `sku2`, ... represent the unique identifiers (let's say course ids) of each course you want to download. The course id is the value of the parameter `sku`of the url of a single course. For instance the course at https://learn.infiniteskills.com/product.html?sku=02196 has the id `02196`. This id is also explicitly displayed on the single course page.
+where `sku1`, `sku2`, ... represent the unique identifiers (let's say course ids) of each course you want to download. The course id is the value of the parameter `sku`of the url of a single course. For instance the course at https://learn.infiniteskills.com/product.html?sku=02196 has the id `02196`. This id is also explicitly displayed on the single course page.
 
 The program will ask for your https://learn.infiniteskills.com credentials, i.e. your username and password. As it would be quickly tedious to enter your credentials on every occasion, you can create or add them to a `netrc` file under the 'machine' name `learn.infiniteskills.com`. The program automatically looks for them.
 
@@ -33,6 +33,6 @@ If you relaunch the program after an interruption, the program will skip the dow
 For each course the program will create a main folder whose name is the title of the course, **in your current directory**. The course folder is then filled with subfolders created for each section of the course. Similarly, the section title provides the name of the section subfolder. Additionally, the unzipped folder of the course working files will be downloaded into the course directory. Finally each lecture video file will be downloaded into its corresponding section folder. As it turns out, each lecture corresponds to one video file, whose name is the lecture name.
 
 ## Installation
-You can download and unzip the latest 0.1 released version zip file from the program's Github repository. However the only file this program actually needs to run is `ifskills-dl.py`.
+You can download and unzip the latest 0.1* version zip file from the program's Github repository. However the only file this program actually needs to run is `ifskills-dl.py`.
 
 Cheers !
