@@ -19,7 +19,8 @@ from collections import OrderedDict
 
 import requests
 from requests.utils import get_netrc_auth
-from requests.exceptions import RequestException
+from requests.exceptions import RequestException, ConnectionError
+from requests.exceptions import MissingSchema, HTTPError
 from bs4 import BeautifulSoup
 
 
@@ -166,8 +167,8 @@ class Session(object):
         AuthenticationError,
         HTMLError,
         DownloadError,
-        RequestException,
-        KeyboardInterrupt
+        KeyboardInterrupt,
+        HTTPError
     ]
 
     def __init__(self, session):
@@ -375,6 +376,7 @@ class Course(object):
     def fetch_string(self, url, params, error_msg, attempts=1):
         headers = self.session.ajax_headers
         fetched = self.session.session.get(url, headers=headers, params=params)
+        fetched.raise_for_status()
         self.session.check_response(fetched, AuthenticationError)
         if fetched.text.startswith('<!DOCTYPE html>'):
             if attempts > 2:
@@ -438,7 +440,13 @@ class Course(object):
         return url
 
     def download(self, url):
-        file = requests.get(url, stream=True)
+        try:
+            file = requests.get(url, stream=True)
+        except MissingSchema:
+            raise_error(DownloadError, "Invalid url")
+        except ConnectionError:
+            raise_error(DownloadError, "Failed to establish a new connection")
+        file.raise_for_status()
         self.session.check_response(file, DownloadError, stream=True)
         return file
 
