@@ -324,6 +324,7 @@ class Course(object):
     def format_lecture(raw):
         lecture = re.sub(r'[\n\t]*(\w+): "', r'"\1": "', raw)
         lecture = lecture.replace('\\', '')
+        lecture = re.sub(r' "(\w+)" ', r' \"\1\" ', lecture)
         lecture = json.loads(lecture)
         mediaid = lecture['mediaid'].split('^')
         lecture['vid'] = mediaid[0]
