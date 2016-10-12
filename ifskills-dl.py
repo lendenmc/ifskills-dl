@@ -70,20 +70,32 @@ def force_exit(msg, error=None):
     raise_error(SystemExit, msg, error)
 
 
+def build_error_msg(error_type, msg_core=None):
+    msg_prefix = error_type.__name__.rstrip('Error')
+    if msg_core is None:
+        msg_core = "didn't return anything"
+    msg = "{} attempt {}".format(msg_prefix, msg_core)
+    return msg
+
+
 class ResponseParser(object):
 
     def __init__(self, response, error_type):
+        self.test_empty_response(response, error_type)
         self.error_type = error_type
-        self.action = self.error_type.__name__.rstrip('Error') + ' attempt'
         self.response = response
-        if not self.response:
-            msg = self.action + " didn't return anything"
-            raise_error(self.error_type, msg)
         self.message = self.response.text
         self.error_msg = self.get_explicit_error()
         self.is_login_error = self.has_error_prefix("Login")
         self.is_clearout_error = self.has_error_prefix("Clearout")
         self.is_authentication_error = self.has_error_prefix("Authentication")
+
+    @staticmethod
+    def test_empty_response(response, error_type):
+        if not response:
+            msg = build_error_msg(error_type)
+            raise_error(error_type, msg)
+        return False
 
     def get_explicit_error(self):
         if self.message and self.message.startswith('error'):
@@ -134,7 +146,7 @@ class ResponseParser(object):
         elif self.is_login_error or self.is_clearout_error:
             raise self.error_type(self.error_msg)
         else:
-            msg = self.action + " failed\n" + self.error_msg
+            msg = build_error_msg(self.error_type, "failed\n" + self.error_msg)
             raise_error(self.error_type, msg)
 
     @classmethod
@@ -445,9 +457,7 @@ class Course(object):
         except ConnectionError:
             raise_error(DownloadError, "Failed to establish a new connection")
         file.raise_for_status()
-        if not file:
-            msg = "Download attempt didn't return anything"
-            raise_error(DownloadError, msg)
+        ResponseParser.test_empty_response(file, DownloadError)
         return file
 
     def get_working_files_id(self):
