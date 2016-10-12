@@ -19,8 +19,9 @@ from collections import OrderedDict
 
 import requests
 from requests.utils import get_netrc_auth
-from requests.exceptions import RequestException, ConnectionError
-from requests.exceptions import MissingSchema, HTTPError
+from requests.exceptions import (
+    RequestException, ConnectionError, MissingSchema, HTTPError
+)
 from bs4 import BeautifulSoup
 
 
@@ -156,7 +157,8 @@ class ResponseParser(object):
 
     @classmethod
     def test_stream(cls, chunk):
-        if type(chunk) is not bytes or chunk.strip().startswith(b'<!DOCTYPE'):
+        if (not isinstance(chunk, bytes) or
+                chunk.strip().startswith(b'<!DOCTYPE')):
             raise_error(DownloadError, "No streaming file was returned")
         return True
 
