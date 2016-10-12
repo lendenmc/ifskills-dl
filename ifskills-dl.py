@@ -171,7 +171,13 @@ class ResponseParser(object):
 
 class Session(object):
 
-    errors_without_traceback = [
+    _host = "https://learn.infiniteskills.com/"
+
+    _ajax_headers = {
+        'X-Requested-With': 'XMLHttpRequest',
+    }
+
+    _errors_without_traceback = [
         AuthenticationError,
         HTMLError,
         DownloadError,
@@ -181,8 +187,6 @@ class Session(object):
 
     def __init__(self, session):
         self.session = session
-        self.host = "https://learn.infiniteskills.com/"
-        self.ajax_headers = self.get_ajax_headers()
         self.login_attempts = 0
 
     def __enter__(self):
@@ -191,7 +195,7 @@ class Session(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        if type in self.errors_without_traceback:
+        if type in self._errors_without_traceback:
             if type is not KeyboardInterrupt:
                 print(value, file=sys.stderr)
             print()
@@ -241,30 +245,32 @@ class Session(object):
             parser.raise_default_error()
 
     def clearout_browser_sessions(self, param):
-        url = self.host + "ajax/login.html"
+        url = self._host + "ajax/login.html"
         params = {
             'action': 'clear',
             'n': param
         }
         try:
-            r = self.session.get(url, headers=self.ajax_headers, params=params)
+            headers = self._ajax_headers
+            r = self.session.get(url, headers=headers, params=params)
         except RequestException as e:
             raise ClearoutError(e)
         self.check_response(r, ClearoutError)
 
     def startup(self):
-        url = self.host + "login.html"
+        url = self._host + "login.html"
         r = self.session.get(url)
         self.check_response(r, LoginError)
 
     def login(self):
-        url = self.host + "ajax/login.html"
+        url = self._host + "ajax/login.html"
         credentials = self.get_credentials()
-        r = self.session.post(url, headers=self.ajax_headers, data=credentials)
+        headers = self._ajax_headers
+        r = self.session.post(url, headers=headers, data=credentials)
         self.check_response(r, LoginError)
 
     def logout(self):
-        url = self.host + "login.html"
+        url = self._host + "login.html"
         params = {
             'action': 'logout'
         }
@@ -273,7 +279,7 @@ class Session(object):
         self.check_response(r, LogoutError)
 
     def authenticate(self, course_id):
-        url = self.host + "player.html"
+        url = self._host + "player.html"
         params = {
             'sku': course_id
         }
@@ -285,7 +291,7 @@ class Session(object):
         return r
 
     def get_credentials(self):
-        auth = get_netrc_auth(self.host)
+        auth = get_netrc_auth(self._host)
         if auth:
             print("Found netrc credentials")
             username, password = auth
@@ -301,22 +307,16 @@ class Session(object):
         }
         return credentials
 
-    @staticmethod
-    def get_ajax_headers():
-        headers = {
-            'X-Requested-With': 'XMLHttpRequest',
-        }
-        return headers
-
 
 class Course(object):
+
+    _resource_host = "http://bitcast-r.v1.iad1.bitgravity.com/"
 
     def __init__(self, id, content, session):
         self.id = id
         self.html = BeautifulSoup(content, 'html.parser')
         self.session = session
         self.title = self.get_title()
-        self.resource_host = "http://bitcast-r.v1.iad1.bitgravity.com/"
         self.lectures = self.get_lectures()
         self.sections = self.get_sections()
         self.working_files_id = self.get_working_files_id()
@@ -383,7 +383,7 @@ class Course(object):
             self.makedir(course_dirname + '/' + section_dirname)
 
     def fetch_string(self, url, params, error_msg, attempts=1):
-        headers = self.session.ajax_headers
+        headers = self.session._ajax_headers
         fetched = self.session.session.get(url, headers=headers, params=params)
         fetched.raise_for_status()
         self.session.check_response(fetched, AuthenticationError)
@@ -396,7 +396,7 @@ class Course(object):
 
     # output format: '?e=1672341893&h=8d8fba20cd6a39739114e23464be721&pos=0'
     def authenticate(self, lecture):
-        url = self.session.host + "ajax/player.html"
+        url = self.session._host + "ajax/player.html"
         params = {key: lecture[key] for key in ['t', 'index', 'file', 'vid']}
         params['action'] = 'hash'
         if self.last_skipped:
@@ -442,7 +442,7 @@ class Course(object):
             raise_error(DownloadError, re.sub(r'\[.+\] ', '', str(e)))
 
     def fetch_url(self, lecture):
-        url = self.resource_host + "infiniteskills/"
+        url = self._resource_host + "infiniteskills/"
         url += lecture['file'].split('/', 3)[3]
         auth_params = self.authenticate(lecture)
         url += auth_params
@@ -477,7 +477,7 @@ class Course(object):
         return True
 
     def fetch_zip_url(self):
-        url = self.session.host + "ajax/history.html"
+        url = self.session._host + "ajax/history.html"
         wfid = self.working_files_id
         params = {
             'event': 'file',
