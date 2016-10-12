@@ -72,24 +72,18 @@ def force_exit(msg, error=None):
 
 class ResponseParser(object):
 
-    def __init__(self, response, error_type, stream=False):
+    def __init__(self, response, error_type):
         self.error_type = error_type
         self.action = self.error_type.__name__.rstrip('Error') + ' attempt'
         self.response = response
         if not self.response:
             msg = self.action + " didn't return anything"
             raise_error(self.error_type, msg)
-        self.stream = stream
-        self.message = self.read_text()
+        self.message = self.response.text
         self.error_msg = self.get_explicit_error()
         self.is_login_error = self.has_error_prefix("Login")
         self.is_clearout_error = self.has_error_prefix("Clearout")
         self.is_authentication_error = self.has_error_prefix("Authentication")
-
-    def read_text(self):
-        if self.stream:
-            return None
-        return self.response.text
 
     def get_explicit_error(self):
         if self.message and self.message.startswith('error'):
@@ -217,8 +211,8 @@ class Session(object):
         except KeyboardInterrupt:
             print()
 
-    def check_response(self, response, error_type, **kwargs):
-        parser = ResponseParser(response, error_type, **kwargs)
+    def check_response(self, response, error_type):
+        parser = ResponseParser(response, error_type)
         if parser.error_msg:
             self.manage_errors(parser)
 
@@ -442,7 +436,8 @@ class Course(object):
         url += auth_params
         return url
 
-    def download(self, url):
+    @staticmethod
+    def download(url):
         try:
             file = requests.get(url, stream=True)
         except MissingSchema:
@@ -450,7 +445,9 @@ class Course(object):
         except ConnectionError:
             raise_error(DownloadError, "Failed to establish a new connection")
         file.raise_for_status()
-        self.session.check_response(file, DownloadError, stream=True)
+        if not file:
+            msg = "Download attempt didn't return anything"
+            raise_error(DownloadError, msg)
         return file
 
     def get_working_files_id(self):
@@ -481,10 +478,11 @@ class Course(object):
         zip_url = self.fetch_string(url, params, error_msg)
         return zip_url
 
-    def stream_working_files(self, zip_file):
+    @staticmethod
+    def stream_working_files(zip_file, local_filename_prefix):
         try:
             with ZipFile(io.BytesIO(zip_file.content)) as myzip:
-                myzip.extractall(self.title)
+                myzip.extractall(local_filename_prefix)
         except BadZipFile:
             raise_error(DownloadError, "No zip file was returned")
 
@@ -503,7 +501,7 @@ if __name__ == "__main__":
                 msg = "Downloading course working files"
                 print_msg(msg, url=zip_url.strip('\n'))
                 zip_file = course.download(zip_url)
-                course.stream_working_files(zip_file)
+                course.stream_working_files(zip_file, course.title)
             print()
             for lecture in course.lectures:
                 local_file = course.make_filename(lecture)
