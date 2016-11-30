@@ -473,7 +473,7 @@ class Course(object):
             print("No working files for this course")
             return
         wf_name = self.title + " - " + "Working Files"
-        if os.path.exists(self.title + '/' + wf_name):
+        if os.path.exists(self.sanitize_filename(self.title) + '/' + wf_name):
             print("Working files already downloaded for this course")
             return
         return True
@@ -509,11 +509,12 @@ if __name__ == "__main__":
             course = Course(course_id, course_content, session)
             course.makedirs()
             if course.test_working_files():
+                local_folder = course.sanitize_filename(course.title)
                 zip_url = course.fetch_zip_url()
                 msg = "Downloading course working files"
                 print_msg(msg, url=zip_url.strip('\n'))
                 zip_file = course.download(zip_url)
-                course.stream_working_files(zip_file, course.title)
+                course.stream_working_files(zip_file, local_folder)
             print()
             for lecture in course.lectures:
                 local_file = course.make_filename(lecture)
