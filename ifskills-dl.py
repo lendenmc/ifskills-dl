@@ -369,6 +369,7 @@ class Course(object):
     @staticmethod
     def sanitize_filename(name):
         name = re.sub(r'\/', '', name)
+        name = name.rstrip()
         return name
 
     @staticmethod
